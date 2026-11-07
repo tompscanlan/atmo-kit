@@ -14,6 +14,10 @@ export interface EventViewData {
 	};
 	viewerRsvpStatus?: 'going' | 'interested' | 'notgoing' | null;
 	viewerRsvpRkey?: string | null;
+	/** The event's URI when it is not in its creator's public repo, such as a record in a space. */
+	eventUri?: string;
+	/** False for an event with no public page to share. */
+	shareable?: boolean;
 	ogImage?: string;
 	speakerProfiles?: Array<{ id?: string; handle?: string; name: string; avatar?: string }>;
 	parentEvent?: FlatEventRecord | null;

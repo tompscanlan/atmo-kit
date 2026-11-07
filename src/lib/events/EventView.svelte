@@ -66,6 +66,8 @@
 	let rkey: string = $derived(data.rkey);
 	let hostProfile = $derived(data.hostProfile);
 	let attendees = $derived(data.attendees);
+	/** False for an event with no public page to share, such as a private one. */
+	let shareable = $derived(data.shareable !== false);
 
 	let theme: EventTheme = $derived(eventData.theme ?? defaultTheme);
 
@@ -91,6 +93,9 @@
 	$effect(() => {
 		let active = true;
 		geoLocation = null;
+		// The geocoder and the map's tiles are other people's servers, and neither gets told where an
+		// event is that only its guests may know about. The address still shows and links out.
+		if (!shareable) return;
 		void resolveGeoLocation(locations).then((resolved) => {
 			if (active) geoLocation = resolved;
 		});
@@ -129,7 +134,7 @@
 
 	onMount(() => {
 		const url = new URL(window.location.href);
-		if (url.searchParams.has('created')) {
+		if (shareable && url.searchParams.has('created')) {
 			url.searchParams.delete('created');
 			history.replaceState({}, '', url.pathname);
 			launchConfetti();
@@ -190,7 +195,8 @@
 		return null;
 	});
 
-	let eventUri = $derived(`at://${did}/community.lexicon.calendar.event/${rkey}`);
+	// A page whose event is not in its creator's repo, such as a record in a space, names it.
+	let eventUri = $derived(data.eventUri ?? `at://${did}/community.lexicon.calendar.event/${rkey}`);
 
 	let ogImageUrl = $derived(data.ogImage ?? `${pageUrl.origin}${pageUrl.pathname}/og.png`);
 
@@ -231,7 +237,7 @@
 			handle: viewer.handle,
 			url: `/p/${encodeURIComponent(viewer.handle || viewer.did)}`
 		});
-		if (status === 'interested') return;
+		if (status === 'interested' || !shareable) return;
 		shareModalTitle = "You're going!";
 		shareModalText = `I'm going to "${eventData.name}".\n\n${shareUrl}`;
 		canSetEventComments = false;
