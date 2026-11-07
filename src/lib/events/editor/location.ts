@@ -1,6 +1,7 @@
 import codes from 'i18n-iso-countries/codes.json' with { type: 'json' };
 import english from 'i18n-iso-countries/langs/en.json' with { type: 'json' };
 import type { EventData } from '../event-types.js';
+import type { EventLocation } from './types.js';
 
 // Use only the maintained JSON datasets, not the package's CommonJS runtime:
 // Vite's dev SSR module runner cannot evaluate its require() calls as ESM.
@@ -49,6 +50,26 @@ export function normalizeAddressLocation<T extends { country?: unknown }>(
 	// truncate a name, or guess a country when the input cannot be resolved.
 	if (!country) throw new LocationValidationError();
 	return { ...location, country };
+}
+
+/** The address someone typed, or null when its country can't be resolved, since the lexicon requires one. */
+export function typedLocation(fields: {
+	street: string;
+	locality: string;
+	region: string;
+	country: string;
+}): EventLocation | null {
+	const country = normalizeCountryCode(fields.country);
+	if (!country) return null;
+	const street = fields.street.trim();
+	const locality = fields.locality.trim();
+	const region = fields.region.trim();
+	return {
+		...(street && { street }),
+		...(locality && { locality }),
+		...(region && { region }),
+		country
+	};
 }
 
 export function normalizeEventLocations(locations: NonNullable<EventData['locations']>) {

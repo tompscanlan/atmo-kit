@@ -1,16 +1,21 @@
 <script lang="ts">
 	import { MapPin, X } from '@sketchyicons/svelte';
 	import { Button, Icon, Input, Modal } from '../../index.js';
+	import { typedLocation } from './location.js';
 	import { getLocationDisplayString, type EventLocation } from './types';
 
 	let {
 		location = $bindable(),
-		locationChanged = $bindable()
+		locationChanged = $bindable(),
+		search: canSearch = true
 	}: {
 		location: EventLocation | null;
 		locationChanged: boolean;
+		/** False to take a typed address, so what's typed goes to no geocoder. */
+		search?: boolean;
 	} = $props();
 
+	let typed = $state({ street: '', locality: '', region: '', country: '' });
 	let showModal = $state(false);
 	let searchText = $state('');
 	let searching = $state(false);
@@ -66,6 +71,19 @@
 		error = '';
 	}
 
+	function useTyped() {
+		const address = typedLocation(typed);
+		if (!address) {
+			error = 'Enter a country, such as France or FR.';
+			return;
+		}
+		location = address;
+		locationChanged = true;
+		typed = { street: '', locality: '', region: '', country: '' };
+		error = '';
+		showModal = false;
+	}
+
 	function remove() {
 		location = null;
 		locationChanged = true;
@@ -102,25 +120,43 @@
 {/if}
 
 <Modal bind:open={showModal} title="Event location">
-	<form
-		onsubmit={(e) => {
-			e.preventDefault();
-			search();
-		}}
-		class="mt-2"
-	>
-		<div class="flex gap-2">
-			<Input
-				type="text"
-				aria-label="Search location"
-				class="min-w-0 flex-1"
-				bind:value={searchText}
-			/>
-			<Button type="submit" disabled={searching || !searchText.trim()}>
-				{searching ? 'Searching...' : 'Search'}
-			</Button>
-		</div>
-	</form>
+	{#if canSearch}
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				search();
+			}}
+			class="mt-2"
+		>
+			<div class="flex gap-2">
+				<Input
+					type="text"
+					aria-label="Search location"
+					class="min-w-0 flex-1"
+					bind:value={searchText}
+				/>
+				<Button type="submit" disabled={searching || !searchText.trim()}>
+					{searching ? 'Searching...' : 'Search'}
+				</Button>
+			</div>
+		</form>
+	{:else}
+		<form
+			onsubmit={(e) => {
+				e.preventDefault();
+				useTyped();
+			}}
+			class="mt-2 grid gap-2"
+		>
+			<Input type="text" aria-label="Street" placeholder="Street" bind:value={typed.street} />
+			<Input type="text" aria-label="City" placeholder="City" bind:value={typed.locality} />
+			<Input type="text" aria-label="Region" placeholder="Region" bind:value={typed.region} />
+			<Input type="text" aria-label="Country" placeholder="Country" bind:value={typed.country} />
+			<div class="mt-2 flex justify-end">
+				<Button type="submit">Use this location</Button>
+			</div>
+		</form>
+	{/if}
 
 	{#if error}
 		<p class="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
@@ -147,17 +183,19 @@
 		</div>
 	{/if}
 
-	<p class="mt-4 text-xs text-base-400 dark:text-base-500">
-		Geocoding by <a
-			href="https://nominatim.openstreetmap.org/"
-			class="underline hover:text-base-600 dark:hover:text-base-400"
-			target="_blank">Nominatim</a
-		>
-		/ &copy;
-		<a
-			href="https://www.openstreetmap.org/copyright"
-			class="underline hover:text-base-600 dark:hover:text-base-400"
-			target="_blank">OpenStreetMap contributors</a
-		>
-	</p>
+	{#if canSearch}
+		<p class="mt-4 text-xs text-base-400 dark:text-base-500">
+			Geocoding by <a
+				href="https://nominatim.openstreetmap.org/"
+				class="underline hover:text-base-600 dark:hover:text-base-400"
+				target="_blank">Nominatim</a
+			>
+			/ &copy;
+			<a
+				href="https://www.openstreetmap.org/copyright"
+				class="underline hover:text-base-600 dark:hover:text-base-400"
+				target="_blank">OpenStreetMap contributors</a
+			>
+		</p>
+	{/if}
 </Modal>

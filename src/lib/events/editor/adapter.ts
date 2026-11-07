@@ -35,6 +35,12 @@ export type EditorAdapter = {
 	features: {
 		delete: boolean;
 		recurring: boolean;
+		/** False for an event whose page can't show an image, such as one that isn't public. */
+		images?: boolean;
+		/** False for an event with no public listing to appear in, so no Public / Unlisted switch. */
+		visibility?: boolean;
+		/** False to take a typed address instead of searching for one, so no geocoder is told where it is. */
+		locationSearch?: boolean;
 	};
 	putRecord(opts: {
 		collection: string;
