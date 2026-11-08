@@ -132,7 +132,8 @@ export async function buildEventRecord(args: {
 	endsAt: string;
 	timezone: string;
 	mode: EventMode;
-	visibility: Visibility;
+	/** Null when no Public / Unlisted choice was offered: the discovery preference is left as it is. */
+	visibility: Visibility | null;
 	theme: EventTheme;
 	links: Array<{ uri: string; name: string }>;
 	location: EventLocation | null;
@@ -227,12 +228,15 @@ export async function buildEventRecord(args: {
 		);
 	}
 
-	const existingPrefs = ((record.preferences as Record<string, unknown> | undefined) ??
-		{}) as Record<string, unknown>;
-	record.preferences = {
-		...existingPrefs,
-		showInDiscovery: visibility !== 'unlisted'
-	};
+	// With no Public / Unlisted choice offered, the record keeps whatever preference it had.
+	if (visibility !== null) {
+		const existingPrefs = ((record.preferences as Record<string, unknown> | undefined) ??
+			{}) as Record<string, unknown>;
+		record.preferences = {
+			...existingPrefs,
+			showInDiscovery: visibility !== 'unlisted'
+		};
+	}
 
 	return record;
 }
