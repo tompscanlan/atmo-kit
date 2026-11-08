@@ -94,6 +94,7 @@
 	let selectedPreset: string | null = $state(
 		initialThumbnailFile ? null : eventData === null ? DEFAULT_PRESET : null
 	);
+	let images = $derived(adapter.features.images !== false);
 	let submitting = $state(false);
 	let error: string | null = $state(null);
 	let titleEditor = $state<Editor | null>(null);
@@ -132,7 +133,7 @@
 	}
 
 	function populateThumbnailFromEventData() {
-		if (!eventData) return;
+		if (!eventData || !images) return;
 		if (eventData.media && eventData.media.length > 0) {
 			const media = getEventThumbnail(eventData.media);
 			if (media?.content) {
@@ -212,7 +213,7 @@
 
 		try {
 			// Generate thumbnail from preset if selected and no custom upload
-			if (selectedPreset && !thumbnailFile) {
+			if (images && selectedPreset && !thumbnailFile) {
 				const rendered = await renderPresetThumbnail({
 					design: selectedPreset,
 					seed: hashSeed(rkey),
@@ -227,14 +228,18 @@
 			}
 
 			const existingMedia = (eventData?.media ?? []) as Array<Record<string, unknown>>;
-			const media = await buildThumbnailMedia({
-				isNew,
-				thumbnailChanged,
-				thumbnailFile,
-				existingMedia,
-				uploadBlob: (blob) =>
-					adapter.uploadBlob(blob) as unknown as Promise<Record<string, unknown>>
-			});
+			const media = images
+				? await buildThumbnailMedia({
+						isNew,
+						thumbnailChanged,
+						thumbnailFile,
+						existingMedia,
+						uploadBlob: (blob) =>
+							adapter.uploadBlob(blob) as unknown as Promise<Record<string, unknown>>
+					})
+				: existingMedia.length > 0
+					? existingMedia
+					: undefined;
 
 			const record = await buildEventRecord({
 				eventData,
@@ -245,7 +250,7 @@
 				endsAt,
 				timezone,
 				mode,
-				visibility,
+				visibility: adapter.features.visibility === false ? null : visibility,
 				theme: eventTheme,
 				links,
 				location,
@@ -326,16 +331,18 @@
 				<div
 					class="grid grid-cols-1 gap-8 md:grid-cols-[14rem_1fr] md:gap-x-10 md:gap-y-6 lg:grid-cols-[16rem_1fr]"
 				>
-					<ThumbnailSection
-						{rkey}
-						{name}
-						dateStr={thumbnailDateStr}
-						accent={eventTheme.accentColor}
-						bind:thumbnailFile
-						bind:thumbnailPreview
-						bind:thumbnailChanged
-						bind:selectedPreset
-					/>
+					{#if images}
+						<ThumbnailSection
+							{rkey}
+							{name}
+							dateStr={thumbnailDateStr}
+							accent={eventTheme.accentColor}
+							bind:thumbnailFile
+							bind:thumbnailPreview
+							bind:thumbnailChanged
+							bind:selectedPreset
+						/>
+					{/if}
 
 					<!-- Right column: event details -->
 					<div class="order-2 min-w-0 md:order-0 md:col-start-2 md:row-span-5 md:row-start-1">
@@ -371,29 +378,31 @@
 						</div>
 
 						<!-- Visibility toggle -->
-						<div class="mb-8">
-							<ToggleGroup
-								type="single"
-								bind:value={
-									() => visibility,
-									(val) => {
-										if (val) visibility = val as Visibility;
+						{#if adapter.features.visibility !== false}
+							<div class="mb-8">
+								<ToggleGroup
+									type="single"
+									bind:value={
+										() => visibility,
+										(val) => {
+											if (val) visibility = val as Visibility;
+										}
 									}
-								}
-								class="w-fit"
-								size="xs"
-							>
-								<ToggleGroupItem value="public">Public</ToggleGroupItem>
-								<ToggleGroupItem value="unlisted">Unlisted</ToggleGroupItem>
-							</ToggleGroup>
-							<div class="mt-1.5 text-xs text-muted">
-								{#if visibility === 'public'}
-									Anyone can view and it appears in discovery.
-								{:else}
-									Public to anyone with the link, but hidden from discovery.
-								{/if}
+									class="w-fit"
+									size="xs"
+								>
+									<ToggleGroupItem value="public">Public</ToggleGroupItem>
+									<ToggleGroupItem value="unlisted">Unlisted</ToggleGroupItem>
+								</ToggleGroup>
+								<div class="mt-1.5 text-xs text-muted">
+									{#if visibility === 'public'}
+										Anyone can view and it appears in discovery.
+									{:else}
+										Public to anyone with the link, but hidden from discovery.
+									{/if}
+								</div>
 							</div>
-						</div>
+						{/if}
 
 						<!-- Date row -->
 						<div class="mb-5 grid min-w-0 gap-2">

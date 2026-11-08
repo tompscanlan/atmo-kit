@@ -35,6 +35,13 @@ export type EditorAdapter = {
 	features: {
 		delete: boolean;
 		recurring: boolean;
+		/** False for an event whose page can't show an image, such as one that isn't public. */
+		images?: boolean;
+		/**
+		 * False for an event with no public listing to appear in: no Public / Unlisted switch, and
+		 * the record's discovery preference is left as it is.
+		 */
+		visibility?: boolean;
 	};
 	putRecord(opts: {
 		collection: string;

@@ -43,6 +43,8 @@
 		pageUrl,
 		embedMode = false,
 		shareUrlOverride,
+		share = true,
+		map = true,
 		extraActions,
 		attendeeActions
 	}: {
@@ -56,6 +58,12 @@
 		 *  of the canonical atmo.rsvp event URL. Useful for embedders that want
 		 *  share links to point at their own event page. */
 		shareUrlOverride?: string;
+		/** False for an event with no public page to share, such as a private one: no share pop-up
+		 *  after creating the event or answering Going. */
+		share?: boolean;
+		/** False to show no map, so neither a geocoder nor map tiles are told where the event is.
+		 *  The address still shows and links out. */
+		map?: boolean;
 		/** App-owned actions such as private reporting; omitted in embeds. */
 		extraActions?: Snippet;
 		/** App-owned actions below the attendee lists, with current RSVP counts. */
@@ -92,6 +100,7 @@
 	$effect(() => {
 		let active = true;
 		geoLocation = null;
+		if (!map) return;
 		void resolveGeoLocation(locations).then((resolved) => {
 			if (active) geoLocation = resolved;
 		});
@@ -134,6 +143,7 @@
 			url.searchParams.delete('created');
 			history.replaceState({}, '', url.pathname);
 			launchConfetti();
+			if (!share) return;
 			shareModalTitle = 'Event created!';
 			shareModalText = `I'm hosting "${eventData.name}"!\n\n${shareUrl}`;
 			canSetEventComments = isHost;
@@ -191,7 +201,8 @@
 		return null;
 	});
 
-	let eventUri = $derived(`at://${did}/community.lexicon.calendar.event/${rkey}`);
+	// The record's own address, which isn't in its creator's repo for every event (one in a space).
+	let eventUri = $derived(eventData.uri || `at://${did}/community.lexicon.calendar.event/${rkey}`);
 
 	let ogImageUrl = $derived(data.ogImage ?? `${pageUrl.origin}${pageUrl.pathname}/og.png`);
 
@@ -234,7 +245,7 @@
 			handle: viewer.handle,
 			url: `/p/${encodeURIComponent(viewer.handle || viewer.did)}`
 		});
-		if (status === 'interested') return;
+		if (status === 'interested' || !share) return;
 		shareModalTitle = "You're going!";
 		shareModalText = `I'm going to "${eventData.name}".\n\n${shareUrl}`;
 		canSetEventComments = false;
