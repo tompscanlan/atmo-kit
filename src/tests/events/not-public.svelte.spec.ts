@@ -23,6 +23,13 @@ const ADDRESS = {
 	locality: 'Louisville',
 	country: 'US'
 };
+const COORDINATES = {
+	$type: 'community.lexicon.location.geo' as const,
+	latitude: '38.25',
+	longitude: '-85.75',
+	name: 'The back garden'
+};
+const ELSEWHERE = 'at://did:plc:elsewhereelsewhereelsewh/community.lexicon.calendar.event/kept';
 
 /** What the page asks for with fetch, which is how a geocoding lookup goes. */
 function watchRequests() {
@@ -109,6 +116,59 @@ describe('the editor, for an event that is not public', () => {
 		expect(document.querySelectorAll('input[type=file]')).toHaveLength(0);
 	});
 
+	it('uploads no cover image for a new event when the page says it can show none', async () => {
+		watchRequests();
+		const adapter = createAdapter();
+		render(EventEditor, {
+			eventData: null,
+			actorDid: event.did,
+			rkey: event.rkey,
+			adapter: { ...adapter, features: { ...adapter.features, images: false } },
+			viewer,
+			prefill: {
+				name: 'A quiet dinner',
+				startsAt: '2099-10-24T18:30:00.000Z',
+				thumbnailFile: new File(['x'], 'cover.png', { type: 'image/png' })
+			}
+		});
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.poll(() => adapter.putRecord).toHaveBeenCalled();
+		expect(adapter.uploadBlob).not.toHaveBeenCalled();
+		expect(adapter.putRecord.mock.calls[0][0].record).not.toHaveProperty('media');
+	});
+
+	it('keeps the cover image an event already has when the page offers none', async () => {
+		watchRequests();
+		const adapter = createAdapter();
+		const media = [
+			{
+				role: 'thumbnail',
+				alt: 'kept',
+				content: { $type: 'blob', ref: { $link: 'bafkreikept' }, mimeType: 'image/png', size: 1 }
+			}
+		];
+		editor({ images: false }, { ...event, media } as unknown as FlatEventRecord, adapter);
+		await expect
+			.element(page.getByRole('textbox', { name: 'Event name', exact: true }))
+			.toHaveTextContent(event.name);
+		await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await expect
+			.poll(() => adapter.putRecord)
+			.toHaveBeenCalledWith(
+				expect.objectContaining({ record: expect.objectContaining({ media }) })
+			);
+		expect(adapter.uploadBlob).not.toHaveBeenCalled();
+	});
+
+	it('tells the index about the record it deleted, wherever that is stored', async () => {
+		watchRequests();
+		const adapter = createAdapter();
+		editor({}, { ...event, uri: ELSEWHERE }, adapter);
+		await page.getByRole('button', { name: 'Delete event', exact: true }).click();
+		await page.getByRole('button', { name: 'Delete', exact: true }).click();
+		await expect.poll(() => adapter.notifyUpdate).toHaveBeenCalledWith(ELSEWHERE);
+	});
+
 	it('offers no public or unlisted choice when the page says it has none', async () => {
 		watchRequests();
 		editor({ visibility: false });
@@ -145,16 +205,40 @@ describe('the event page, for an event that is not public', () => {
 	it('answers the record it shows, wherever that is stored', async () => {
 		watchRequests();
 		const adapter = createAdapter();
-		const elsewhere = 'at://did:plc:elsewhereelsewhereelsewh/community.lexicon.calendar.event/kept';
-		eventPage({ share: false }, { ...event, uri: elsewhere }, adapter);
+		eventPage({ share: false }, { ...event, uri: ELSEWHERE }, adapter);
 		await page.getByRole('button', { name: 'Going', exact: true }).click();
 		await expect.element(page.getByText("You're Going", { exact: true })).toBeVisible();
 		expect(adapter.putRecord).toHaveBeenCalledWith(
 			expect.objectContaining({
 				collection: 'community.lexicon.calendar.rsvp',
-				record: expect.objectContaining({ subject: { uri: elsewhere } })
+				record: expect.objectContaining({ subject: { uri: ELSEWHERE } })
 			})
 		);
+	});
+
+	it('names the record it shows in the calendar file', async () => {
+		watchRequests();
+		const files: Blob[] = [];
+		const spies = [
+			vi.spyOn(URL, 'createObjectURL').mockImplementation((file) => {
+				files.push(file as Blob);
+				return '#calendar';
+			}),
+			vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {}),
+			vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+		];
+		try {
+			eventPage({ share: false }, { ...event, uri: ELSEWHERE });
+			await page.getByRole('button', { name: 'Add to Calendar', exact: true }).click();
+			// The page makes other object URLs of its own; the calendar file is the one to read.
+			const calendars = () => files.filter((file) => file.type.startsWith('text/calendar'));
+			await expect.poll(() => calendars().length).toBe(1);
+			// Long iCalendar lines are folded onto continuation lines that start with a space.
+			const text = (await calendars()[0].text()).replace(/\r\n[ \t]/g, '');
+			expect(text).toContain(`UID:${ELSEWHERE}`);
+		} finally {
+			for (const spy of spies) spy.mockRestore();
+		}
 	});
 
 	it('asks a Going guest to share a public event', async () => {
@@ -195,6 +279,20 @@ describe('the event page, for an event that is not public', () => {
 		await expect
 			.poll(() => requests().filter((url) => url.includes('/api/geocoding')))
 			.toHaveLength(1);
+	});
+
+	it('shows a public event’s coordinates on a map', async () => {
+		watchRequests();
+		eventPage({}, { ...event, locations: [COORDINATES] });
+		await expect.element(page.getByText('Location:', { exact: true })).toBeVisible();
+	});
+
+	it('shows no map of its coordinates, whose tiles would say where it is', async () => {
+		watchRequests();
+		eventPage({ map: false }, { ...event, locations: [COORDINATES] });
+		await expect.element(page.getByText('The back garden').first()).toBeVisible();
+		await new Promise((settled) => setTimeout(settled, 200));
+		expect(page.getByText('Location:', { exact: true }).elements()).toHaveLength(0);
 	});
 
 	it('leaves its address out of the geocoder with no map, and still shows it', async () => {
