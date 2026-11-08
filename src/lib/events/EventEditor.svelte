@@ -95,6 +95,7 @@
 		initialThumbnailFile ? null : eventData === null ? DEFAULT_PRESET : null
 	);
 	let images = $derived(adapter.features.images !== false);
+	let showVisibility = $derived(adapter.features.visibility !== false);
 	let submitting = $state(false);
 	let error: string | null = $state(null);
 	let titleEditor = $state<Editor | null>(null);
@@ -250,7 +251,7 @@
 				endsAt,
 				timezone,
 				mode,
-				visibility: adapter.features.visibility === false ? null : visibility,
+				visibility: showVisibility ? visibility : null,
 				theme: eventTheme,
 				links,
 				location,
@@ -293,7 +294,8 @@
 				collection: 'community.lexicon.calendar.event',
 				rkey
 			});
-			const eventUri = `at://${viewer.did}/community.lexicon.calendar.event/${rkey}`;
+			const eventUri =
+				eventData?.uri || `at://${viewer.did}/community.lexicon.calendar.event/${rkey}`;
 			await adapter.notifyUpdate?.(eventUri);
 			adapter.onDeleted?.();
 		} catch (e) {
@@ -378,7 +380,7 @@
 						</div>
 
 						<!-- Visibility toggle -->
-						{#if adapter.features.visibility !== false}
+						{#if showVisibility}
 							<div class="mb-8">
 								<ToggleGroup
 									type="single"
