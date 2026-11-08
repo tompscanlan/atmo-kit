@@ -210,6 +210,8 @@ Import `theme.css` as above; it scans the packaged event components too, so no s
 
 The initial move preserves legacy defaults: `/p/:actor/e/:rkey` event and `/p/:actor` profile links, `/api/geocoding`, Bluesky's public comments API, the `?created` share flow and RSVP's `createdWith` identifier. Hosts currently need compatible routes/endpoints; `shareUrlOverride` changes outbound share links. These defaults are not a new universal routing contract. Further host-policy extraction can happen independently of the package move.
 
+A page can also show and edit an event that isn't public, such as a record in a space that only its guests can read. `EventCard` takes `href` for a card whose page is not `/p/:actor/e/:rkey`. `EventView` takes `share={false}`, so no share pop-up opens after `?created` or a Going answer, and `map={false}`, so neither `/api/geocoding` nor map tiles are told where the event is; the address still shows and links out. In `EditorAdapter.features`, `images: false` offers and uploads no cover image, and `visibility: false` hides the Public / Unlisted switch and leaves the record's `preferences` as they are. What a page chooses to show is a prop; what the host can store is an adapter feature. `EventView` and the editor name the event by `eventData.uri`, so it must be the record's own URI. The editor's location search still calls `/api/geocoding`.
+
 Event browser tests are in `src/tests/events`; run `pnpm test:unit --run --project events`. `pnpm test:package` checks the actual built server entry and its runtime import graph without Vite aliases.
 
 ## Photos, Grain albums and Streamplace

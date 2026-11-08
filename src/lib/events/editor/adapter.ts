@@ -35,7 +35,11 @@ export type EditorAdapter = {
 	features: {
 		delete: boolean;
 		recurring: boolean;
-		/** False for an event whose page can't show an image, such as one that isn't public. */
+		/**
+		 * False to offer and upload no cover image in the editor, for an event whose page can't
+		 * show one, such as one that isn't public. EventView doesn't read it: it shows whatever
+		 * `eventData.media` holds.
+		 */
 		images?: boolean;
 		/**
 		 * False for an event with no public listing to appear in: no Public / Unlisted switch, and
