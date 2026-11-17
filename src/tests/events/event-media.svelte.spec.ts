@@ -1,4 +1,4 @@
-import { expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { page } from 'vitest/browser';
 import { render } from 'vitest-browser-svelte';
 import EventCard from '../../lib/events/EventCard.svelte';
@@ -126,4 +126,85 @@ it('does not restore a removed last image when building the record', async () =>
 		resolveHandle: async () => viewer.did!
 	});
 	expect(record).not.toHaveProperty('media');
+});
+
+describe('a new event whose image does not upload', () => {
+	afterEach(() => vi.restoreAllMocks());
+	const prefill = { name: 'A quiet dinner', startsAt: '2099-10-24T18:30:00.000Z' };
+	function newEvent(
+		adapter: ReturnType<typeof createAdapter>,
+		thumbnailFile?: File,
+		eventData: typeof event | null = null
+	) {
+		adapter.uploadBlob.mockRejectedValue(new Error('upload refused'));
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		render(EventEditor, {
+			eventData,
+			actorDid: event.did,
+			rkey: event.rkey,
+			adapter,
+			viewer,
+			prefill: { ...prefill, ...(thumbnailFile ? { thumbnailFile } : {}) }
+		});
+	}
+
+	/** Picks a preset cover in the thumbnail dialog, as a host does. */
+	async function pickPreset(name: string) {
+		await page.getByRole('button', { name: 'Change thumbnail' }).click();
+		await page.getByRole('button', { name: `Use ${name} preset thumbnail`, exact: true }).click();
+	}
+
+	async function notSaved(adapter: ReturnType<typeof createAdapter>, button: string) {
+		await page.getByRole('button', { name: button, exact: true }).click();
+		await expect.poll(() => adapter.uploadBlob).toHaveBeenCalled();
+		await expect.element(page.getByRole('button', { name: button, exact: true })).toBeEnabled();
+		expect(adapter.putRecord).not.toHaveBeenCalled();
+	}
+
+	it('is not created without a preset cover its host picked', async () => {
+		const adapter = createAdapter();
+		newEvent(adapter);
+		await pickPreset('gradient');
+		await notSaved(adapter, 'Publish Event');
+	});
+
+	it('is not created without the default cover once its host picked it', async () => {
+		const adapter = createAdapter();
+		newEvent(adapter);
+		await pickPreset('plain');
+		await notSaved(adapter, 'Publish Event');
+	});
+
+	it('is not saved, when editing, without a preset cover its host picked', async () => {
+		const adapter = createAdapter();
+		newEvent(adapter, undefined, event);
+		await expect
+			.element(page.getByRole('textbox', { name: 'Event name', exact: true }))
+			.toHaveTextContent(event.name);
+		await pickPreset('gradient');
+		await notSaved(adapter, 'Save Changes');
+	});
+
+	it('is created without the generated cover', async () => {
+		const adapter = createAdapter();
+		newEvent(adapter);
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.poll(() => adapter.putRecord).toHaveBeenCalled();
+		expect(adapter.uploadBlob).toHaveBeenCalled();
+		expect(adapter.putRecord.mock.calls[0][0].record).not.toHaveProperty('media');
+	});
+
+	it('is not created without the image its host chose', async () => {
+		const adapter = createAdapter();
+		const chosen = new File(
+			[
+				'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="20"><rect width="10" height="20" /></svg>'
+			],
+			'cover.svg',
+			{ type: 'image/svg+xml' }
+		);
+		newEvent(adapter, chosen);
+		await notSaved(adapter, 'Publish Event');
+	});
 });

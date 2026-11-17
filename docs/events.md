@@ -49,6 +49,8 @@ Event components read Bluesky's public AppView and CDN by default. Apps using ot
 
 Event cards and covers prefer native `media` images, then an HTTPS `poster.url`, then a URI named `Event Image` (laugh.town compatibility). `getEventExternalImage(event)` from `events-data` returns `{ url, alt, aspectRatio? }` or `null`, validating URLs and optional poster dimensions. It performs no IO; apps must apply their own allowlist/redirect policy before fetching an external image server-side.
 
+When a new event is created with the default cover the editor gives it, and the host hasn't chosen a cover, a failed upload of that cover saves the event without it. Any other cover that fails to upload, an image or a preset the host picked, fails the save, so it is never left out silently.
+
 Apps implement `EditorAdapter` for authentication prompts, repository IO, uploads, save/delete navigation, and optional linked-record transport/indexing notifications. Keep sessions, Cloudflare bindings, app routes, server endpoints, caching and moderation in the app. The editor/view never imports a consumer's app state. See `EventViewData` and `EditorAdapter` in the public types for the data and callback contracts.
 
 Full event UI requires optional peers (ordinary Kit consumers do not):

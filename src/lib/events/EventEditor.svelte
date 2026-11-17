@@ -99,6 +99,10 @@
 	let selectedPreset: string | null = $state(
 		initialThumbnailFile ? null : eventData === null ? DEFAULT_PRESET : null
 	);
+	/** The cover drawn from the selected preset, once it is drawn for a save. */
+	let generatedThumbnail: File | null = null;
+	/** The host chose a cover, or took it away, rather than leaving a new event's default. */
+	let coverChosen = false;
 	let images = $derived(adapter.features.images !== false);
 	const embedOptions = linkEmbedOptions();
 	/** As on the event page: the app's embeds, plus cards for links to other events. */
@@ -248,9 +252,19 @@
 				});
 				if (rendered) {
 					thumbnailFile = rendered;
+					generatedThumbnail = rendered;
 					thumbnailChanged = true;
 				}
 			}
+			// The default cover a new event gets without asking isn't worth losing the event over, so
+			// if it doesn't upload the event is saved without it. A cover the host chose, a preset as
+			// much as an image, fails the save instead, so it is never left out without their knowing.
+			const defaultCover =
+				isNew &&
+				!coverChosen &&
+				selectedPreset === DEFAULT_PRESET &&
+				thumbnailFile !== null &&
+				thumbnailFile === generatedThumbnail;
 
 			const existingMedia = (eventData?.media ?? []) as Array<Record<string, unknown>>;
 			const media = images
@@ -259,8 +273,15 @@
 						thumbnailChanged,
 						thumbnailFile,
 						existingMedia,
-						uploadBlob: (blob) =>
-							adapter.uploadBlob(blob) as unknown as Promise<Record<string, unknown>>
+						uploadBlob: async (blob) => {
+							try {
+								return (await adapter.uploadBlob(blob)) as unknown as Record<string, unknown>;
+							} catch (e) {
+								if (!defaultCover) throw e;
+								console.warn('Generated cover not uploaded; saving the event without it:', e);
+								return null;
+							}
+						}
 					})
 				: existingMedia.length > 0
 					? existingMedia
@@ -366,7 +387,13 @@
 							bind:thumbnailFile
 							bind:thumbnailPreview
 							bind:thumbnailChanged
-							bind:selectedPreset
+							bind:selectedPreset={
+								() => selectedPreset,
+								(preset) => {
+									selectedPreset = preset;
+									coverChosen = true;
+								}
+							}
 						/>
 					{/if}
 

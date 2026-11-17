@@ -90,7 +90,8 @@ export async function buildThumbnailMedia(args: {
 	thumbnailChanged: boolean;
 	thumbnailFile: File | null;
 	existingMedia: Array<Record<string, unknown>>;
-	uploadBlob: (blob: Blob) => Promise<Record<string, unknown>>;
+	/** Null leaves the new image out and keeps the media as it was. */
+	uploadBlob: (blob: Blob) => Promise<Record<string, unknown> | null>;
 }): Promise<Array<Record<string, unknown>> | undefined> {
 	const { isNew, thumbnailChanged, thumbnailFile, existingMedia, uploadBlob } = args;
 
