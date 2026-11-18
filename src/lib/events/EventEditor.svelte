@@ -137,13 +137,30 @@
 		unlisted: 'Unlisted',
 		private: 'Private'
 	};
+	/** Whether an existing event is private, as it was when the editor opened it. */
+	let existingPrivate: boolean | null = $state(null);
 	// An existing event stays on its side of private: a private one offers only Private, and a
 	// public or unlisted one can't become private.
 	let shownVisibilityOptions = $derived.by((): readonly Visibility[] => {
 		if (isNew) return visibilityOptions;
-		if (visibility === 'private') return ['private'];
+		if (existingPrivate ?? visibility === 'private') return ['private'];
 		return visibilityOptions.filter((option) => option !== 'private');
 	});
+	/** Why saving with this choice through this adapter could break privacy, or null if it can't. */
+	function privacyRefusal(choice: Visibility, through: EditorAdapter): string | null {
+		// A private event goes only to a save path that keeps it private, never to a public repo.
+		if (choice === 'private' && !through.features.private)
+			return "This page can't save a private event.";
+		// An existing event's record already lives where it was first saved, so neither the choice nor
+		// the adapter may move it.
+		if (
+			existingPrivate !== null &&
+			(existingPrivate !== (choice === 'private') ||
+				existingPrivate !== Boolean(through.features.private))
+		)
+			return "This event can't move to or from Private.";
+		return null;
+	}
 	// Each pick replaces any still waiting for an answer, so an older answer that lands late
 	// doesn't undo a newer pick.
 	let latestVisibilityPick = 0;
@@ -223,6 +240,7 @@
 		if (adapter.features.private) visibility = 'private';
 		else if (visibility !== 'private')
 			visibility = prefs && prefs.showInDiscovery === false ? 'unlisted' : 'public';
+		existingPrivate = visibility === 'private';
 		links = eventData.uris ? eventData.uris.map((l) => ({ uri: l.uri, name: l.name || '' })) : [];
 		if (eventData.theme) eventTheme = { ...eventData.theme };
 		populateLocationFromEventData();
@@ -278,9 +296,8 @@
 		const saveShowsVisibility = showVisibility;
 		const saveImages = images;
 		latestVisibilityPick++;
-		// A private event goes only to a save path that keeps it private, never to a public repo.
-		if (saveVisibility === 'private' && !saveAdapter.features.private)
-			return void (error = "This page can't save a private event, so it wasn't saved.");
+		const refusal = privacyRefusal(saveVisibility, saveAdapter);
+		if (refusal) return void (error = `${refusal} It wasn't saved.`);
 
 		submitting = true;
 
@@ -567,7 +584,7 @@
 									? 'Publish Event'
 									: 'Save Changes'}
 						</Button>
-						{#if !isNew && adapter.features.recurring && (visibility !== 'private' || adapter.features.private)}
+						{#if !isNew && adapter.features.recurring && privacyRefusal(visibility, adapter) === null}
 							<Button
 								type="button"
 								variant="secondary"

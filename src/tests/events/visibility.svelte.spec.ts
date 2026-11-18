@@ -299,4 +299,54 @@ describe('the editor visibility switch', () => {
 			showInDiscovery: false
 		});
 	});
+
+	it('refuses to move an existing private event to Public when the page changes it after opening', async () => {
+		const ordinary = createAdapter();
+		const { rerender } = render(VisibilityFixture, {
+			adapter: createPrivateAdapter(),
+			viewer,
+			eventData: event,
+			visibilityOptions: ['public', 'unlisted', 'private'],
+			initialVisibility: 'private'
+		});
+		await expect.element(chosen()).toHaveTextContent('private');
+		await rerender({ adapter: ordinary, pageVisibility: 'public' });
+		await expect.element(chosen()).toHaveTextContent('public');
+		expect(choice('Public').elements()).toHaveLength(0);
+		await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(ordinary.putRecord).not.toHaveBeenCalled();
+	});
+
+	it('refuses to move an existing public event to Private when the page changes it after opening', async () => {
+		const privateAdapter = createPrivateAdapter();
+		const { rerender } = render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			eventData: event,
+			visibilityOptions: ['public', 'unlisted', 'private']
+		});
+		await expect.element(chosen()).toHaveTextContent('public');
+		await rerender({ adapter: privateAdapter, pageVisibility: 'private' });
+		await expect.element(chosen()).toHaveTextContent('private');
+		await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(privateAdapter.putRecord).not.toHaveBeenCalled();
+	});
+
+	it('refuses to save an existing public event through a private adapter passed after opening', async () => {
+		const privateAdapter = createPrivateAdapter();
+		const { rerender } = render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			eventData: event,
+			visibilityOptions: ['public', 'unlisted', 'private']
+		});
+		await expect.element(chosen()).toHaveTextContent('public');
+		await rerender({ adapter: privateAdapter });
+		await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(privateAdapter.putRecord).not.toHaveBeenCalled();
+		expect(page.getByRole('button', { name: 'Add recurring events' }).elements()).toHaveLength(0);
+	});
 });

@@ -9,7 +9,8 @@
 		eventData = null,
 		visibilityOptions,
 		confirmVisibility,
-		initialVisibility = 'public'
+		initialVisibility = 'public',
+		pageVisibility
 	}: {
 		adapter: EditorAdapter;
 		viewer: EditorViewer;
@@ -17,9 +18,14 @@
 		visibilityOptions?: readonly Visibility[];
 		confirmVisibility?: (next: Visibility) => boolean | Promise<boolean>;
 		initialVisibility?: Visibility;
+		/** A value the page sets after the editor is open, as a page's own code might. */
+		pageVisibility?: Visibility;
 	} = $props();
 	// svelte-ignore state_referenced_locally
 	let visibility = $state<Visibility>(initialVisibility);
+	$effect(() => {
+		if (pageVisibility) visibility = pageVisibility;
+	});
 </script>
 
 <EventEditor
