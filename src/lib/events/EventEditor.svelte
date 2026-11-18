@@ -40,7 +40,10 @@
 		viewer,
 		initialTheme,
 		prefill = null,
-		mediaUrl = getCDNImageBlobUrl
+		mediaUrl = getCDNImageBlobUrl,
+		visibility = $bindable('public'),
+		visibilityOptions = ['public', 'unlisted'],
+		confirmVisibility
 	}: {
 		eventData: FlatEventRecord | null;
 		actorDid: string;
@@ -53,6 +56,12 @@
 		prefill?: EventEditorPrefill | null;
 		/** Where the editor loads the event's current image from; the public CDN by default. */
 		mediaUrl?: EventMediaUrl;
+		/** Who can see the event. Bind it to follow the host's choice; an existing event's record sets it. */
+		visibility?: Visibility;
+		/** The choices the switch offers, in order. Public and Unlisted by default. */
+		visibilityOptions?: readonly Visibility[];
+		/** Asked before the choice changes; returning false keeps the current one. */
+		confirmVisibility?: (next: Visibility) => boolean | Promise<boolean>;
 	} = $props();
 
 	let isNew = $derived(eventData === null);
@@ -79,7 +88,6 @@
 	);
 	let timezone = $state(initialTimezone);
 	let mode: EventMode = $state(initialPrefill?.mode ?? 'inperson');
-	let visibility: Visibility = $state('public');
 	// svelte-ignore state_referenced_locally
 	let eventTheme: EventTheme = $state(
 		eventData === null
@@ -124,6 +132,46 @@
 		];
 	});
 	let showVisibility = $derived(adapter.features.visibility !== false);
+	const VISIBILITY_LABELS: Record<Visibility, string> = {
+		public: 'Public',
+		unlisted: 'Unlisted',
+		private: 'Private'
+	};
+	/** Whether an existing event is private, as it was when the editor opened it. */
+	let existingPrivate: boolean | null = $state(null);
+	// An existing event stays on its side of private: a private one offers only Private, and a
+	// public or unlisted one can't become private.
+	let shownVisibilityOptions = $derived.by((): readonly Visibility[] => {
+		if (isNew) return visibilityOptions;
+		if (existingPrivate ?? visibility === 'private') return ['private'];
+		return visibilityOptions.filter((option) => option !== 'private');
+	});
+	/** Why saving with this choice through this adapter could break privacy, or null if it can't. */
+	function privacyRefusal(choice: Visibility, through: EditorAdapter): string | null {
+		// A private event goes only to a save path that keeps it private, never to a public repo.
+		if (choice === 'private' && !through.features.private)
+			return "This page can't save a private event.";
+		// An existing event's record already lives where it was first saved, so neither the choice nor
+		// the adapter may move it.
+		if (
+			existingPrivate !== null &&
+			(existingPrivate !== (choice === 'private') ||
+				existingPrivate !== Boolean(through.features.private))
+		)
+			return "This event can't move to or from Private.";
+		return null;
+	}
+	// Each pick replaces any still waiting for an answer, so an older answer that lands late
+	// doesn't undo a newer pick.
+	let latestVisibilityPick = 0;
+	async function chooseVisibility(next: Visibility) {
+		const pick = ++latestVisibilityPick;
+		if (next === visibility) return;
+		if (confirmVisibility && !(await Promise.resolve(confirmVisibility(next)).catch(() => false)))
+			return;
+		if (pick !== latestVisibilityPick) return;
+		visibility = next;
+	}
 	let submitting = $state(false);
 	let error: string | null = $state(null);
 	let titleEditor = $state<Editor | null>(null);
@@ -187,8 +235,12 @@
 		mode = eventData.mode ? stripModePrefix(eventData.mode) : 'inperson';
 		const prefs = (eventData as unknown as { preferences?: { showInDiscovery?: boolean } })
 			.preferences;
-		if (prefs && prefs.showInDiscovery === false) visibility = 'unlisted';
-		else visibility = 'public';
+		// The record has no private field (its address in a space does, but isn't read here), so the
+		// page or a private adapter says so.
+		if (adapter.features.private) visibility = 'private';
+		else if (visibility !== 'private')
+			visibility = prefs && prefs.showInDiscovery === false ? 'unlisted' : 'public';
+		existingPrivate = visibility === 'private';
 		links = eventData.uris ? eventData.uris.map((l) => ({ uri: l.uri, name: l.name || '' })) : [];
 		if (eventData.theme) eventTheme = { ...eventData.theme };
 		populateLocationFromEventData();
@@ -237,12 +289,21 @@
 		if (parseDateTime(endsAt).compare(parseDateTime(startsAt)) <= 0)
 			return void (error = 'End time must be after the start time.');
 		if (!viewer.isLoggedIn || !viewer.did) return void (error = 'You must be logged in.');
+		// The save uses the choice and the adapter as they are now, even if they change while it
+		// runs, and drops any pick still waiting for an answer.
+		const saveAdapter = adapter;
+		const saveVisibility = visibility;
+		const saveShowsVisibility = showVisibility;
+		const saveImages = images;
+		latestVisibilityPick++;
+		const refusal = privacyRefusal(saveVisibility, saveAdapter);
+		if (refusal) return void (error = `${refusal} It wasn't saved.`);
 
 		submitting = true;
 
 		try {
 			// Generate thumbnail from preset if selected and no custom upload
-			if (images && selectedPreset && !thumbnailFile) {
+			if (saveImages && selectedPreset && !thumbnailFile) {
 				const rendered = await renderPresetThumbnail({
 					design: selectedPreset,
 					seed: hashSeed(rkey),
@@ -267,7 +328,7 @@
 				thumbnailFile === generatedThumbnail;
 
 			const existingMedia = (eventData?.media ?? []) as Array<Record<string, unknown>>;
-			const media = images
+			const media = saveImages
 				? await buildThumbnailMedia({
 						isNew,
 						thumbnailChanged,
@@ -275,7 +336,7 @@
 						existingMedia,
 						uploadBlob: async (blob) => {
 							try {
-								return (await adapter.uploadBlob(blob)) as unknown as Record<string, unknown>;
+								return (await saveAdapter.uploadBlob(blob)) as unknown as Record<string, unknown>;
 							} catch (e) {
 								if (!defaultCover) throw e;
 								console.warn('Generated cover not uploaded; saving the event without it:', e);
@@ -296,13 +357,13 @@
 				endsAt,
 				timezone,
 				mode,
-				visibility: showVisibility ? visibility : null,
+				visibility: saveShowsVisibility ? saveVisibility : null,
 				theme: eventTheme,
 				links,
 				location,
 				locationChanged,
 				media,
-				resolveHandle: (handle) => adapter.resolveHandle(handle)
+				resolveHandle: (handle) => saveAdapter.resolveHandle(handle)
 			});
 
 			if (isNew && prefill?.additionalData) {
@@ -310,14 +371,14 @@
 				record.additionalData = { ...existing, ...prefill.additionalData };
 			}
 
-			const result = await adapter.putRecord({
+			const result = await saveAdapter.putRecord({
 				collection: 'community.lexicon.calendar.event',
 				rkey,
 				record
 			});
 
-			await adapter.notifyUpdate?.(result.uri);
-			adapter.onSaved({ uri: result.uri, rkey, isNew });
+			await saveAdapter.notifyUpdate?.(result.uri);
+			saveAdapter.onSaved({ uri: result.uri, rkey, isNew });
 		} catch (e) {
 			console.error(`Failed to ${isNew ? 'create' : 'save'} event:`, e);
 			error =
@@ -437,21 +498,25 @@
 									type="single"
 									bind:value={
 										() => visibility,
-										(val) => {
-											if (val) visibility = val as Visibility;
-										}
+										// Picking the current choice again sends '': still a pick, so it drops any
+										// pick waiting for an answer.
+										(val) => void chooseVisibility((val || visibility) as Visibility)
 									}
+									disabled={submitting}
 									class="w-fit"
 									size="xs"
 								>
-									<ToggleGroupItem value="public">Public</ToggleGroupItem>
-									<ToggleGroupItem value="unlisted">Unlisted</ToggleGroupItem>
+									{#each shownVisibilityOptions as option (option)}
+										<ToggleGroupItem value={option}>{VISIBILITY_LABELS[option]}</ToggleGroupItem>
+									{/each}
 								</ToggleGroup>
 								<div class="mt-1.5 text-xs text-base-600 dark:text-base-400">
 									{#if visibility === 'public'}
 										Anyone can view and it appears in discovery.
-									{:else}
+									{:else if visibility === 'unlisted'}
 										Public to anyone with the link, but hidden from discovery.
+									{:else}
+										Only people you invite can see it.
 									{/if}
 								</div>
 							</div>
@@ -507,7 +572,7 @@
 						</div>
 
 						{#if error}
-							<p class="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>
+							<p role="alert" class="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>
 						{/if}
 
 						<Button type="submit" disabled={submitting || !name.trim() || !startsAt || !endsAt}>
@@ -519,7 +584,7 @@
 									? 'Publish Event'
 									: 'Save Changes'}
 						</Button>
-						{#if !isNew && adapter.features.recurring}
+						{#if !isNew && adapter.features.recurring && privacyRefusal(visibility, adapter) === null}
 							<Button
 								type="button"
 								variant="secondary"
@@ -608,5 +673,7 @@
 	{selectedPreset}
 	{adapter}
 	{viewer}
+	{visibility}
+	{privacyRefusal}
 	accent={eventTheme.accentColor}
 />

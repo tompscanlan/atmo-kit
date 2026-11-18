@@ -1,7 +1,7 @@
 /** Event types and pure helpers. Safe to import without Svelte, CSS or browser players. */
 export type { EventViewData } from './events/view-data.js';
 export type { EditorAdapter, EditorBlobRef, EditorViewer } from './events/editor/adapter.js';
-export type { EventEditorPrefill } from './events/editor/types.js';
+export type { EventEditorPrefill, Visibility as EventVisibility } from './events/editor/types.js';
 export type {
 	EventData,
 	EventLexiconMain,

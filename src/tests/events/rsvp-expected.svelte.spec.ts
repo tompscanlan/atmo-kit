@@ -157,7 +157,9 @@ describe('rsvpExpected', () => {
 				selectedPreset: null,
 				accent: 'pink',
 				adapter,
-				viewer
+				viewer,
+				visibility: 'public',
+				privacyRefusal: () => null
 			});
 			await page.getByRole('spinbutton', { name: 'Number of events to create' }).fill('2');
 			await page.getByRole('button', { name: 'Create 2 events', exact: true }).click();

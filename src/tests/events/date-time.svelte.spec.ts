@@ -124,7 +124,9 @@ describe('event date/time controls', () => {
 			selectedPreset: null,
 			accent: 'pink',
 			adapter,
-			viewer
+			viewer,
+			visibility: 'public',
+			privacyRefusal: () => null
 		});
 		await page.getByRole('button', { name: /^Create \d+ events$/ }).click();
 		await expect

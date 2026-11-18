@@ -229,13 +229,14 @@ export async function buildEventRecord(args: {
 		);
 	}
 
-	// With no Public / Unlisted choice offered, the record keeps whatever preference it had.
+	// With no visibility choice offered, the record keeps whatever preference it had. Only a public
+	// event appears in discovery.
 	if (visibility !== null) {
 		const existingPrefs = ((record.preferences as Record<string, unknown> | undefined) ??
 			{}) as Record<string, unknown>;
 		record.preferences = {
 			...existingPrefs,
-			showInDiscovery: visibility !== 'unlisted'
+			showInDiscovery: visibility === 'public'
 		};
 	}
 

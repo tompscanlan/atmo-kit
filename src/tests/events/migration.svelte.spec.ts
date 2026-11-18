@@ -207,7 +207,9 @@ describe('Atmo Kit migration', () => {
 			selectedPreset: null,
 			accent: 'pink',
 			adapter,
-			viewer
+			viewer,
+			visibility: 'public',
+			privacyRefusal: () => null
 		});
 		const count = page.getByRole('spinbutton', { name: 'Number of events to create' });
 		await count.fill('');

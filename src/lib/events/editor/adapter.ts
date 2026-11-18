@@ -45,10 +45,15 @@ export type EditorAdapter = {
 		 */
 		images?: boolean;
 		/**
-		 * False for an event with no public listing to appear in: no Public / Unlisted switch, and
-		 * the record's discovery preference is left as it is.
+		 * False hides the visibility switch and leaves the record's discovery preference as it is.
 		 */
 		visibility?: boolean;
+		/**
+		 * True when this adapter keeps what it saves private, such as in a permissioned space. The
+		 * editor saves an event set to Private only through such an adapter, since turning
+		 * discovery off leaves a record in a public repo readable by anyone.
+		 */
+		private?: boolean;
 	};
 	putRecord(opts: {
 		collection: string;
