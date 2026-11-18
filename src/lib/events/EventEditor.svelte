@@ -137,6 +137,13 @@
 		unlisted: 'Unlisted',
 		private: 'Private'
 	};
+	// An existing event stays on its side of private: a private one offers only Private, and a
+	// public or unlisted one can't become private.
+	let shownVisibilityOptions = $derived.by((): readonly Visibility[] => {
+		if (isNew) return visibilityOptions;
+		if (visibility === 'private') return ['private'];
+		return visibilityOptions.filter((option) => option !== 'private');
+	});
 	// Each pick replaces any still waiting for an answer, so an older answer that lands late
 	// doesn't undo a newer pick.
 	let latestVisibilityPick = 0;
@@ -210,8 +217,9 @@
 		mode = eventData.mode ? stripModePrefix(eventData.mode) : 'inperson';
 		const prefs = (eventData as unknown as { preferences?: { showInDiscovery?: boolean } })
 			.preferences;
-		if (prefs && prefs.showInDiscovery === false) visibility = 'unlisted';
-		else visibility = 'public';
+		// A private event's record doesn't say it is private; the page does, and that stays.
+		if (visibility !== 'private')
+			visibility = prefs && prefs.showInDiscovery === false ? 'unlisted' : 'public';
 		links = eventData.uris ? eventData.uris.map((l) => ({ uri: l.uri, name: l.name || '' })) : [];
 		if (eventData.theme) eventTheme = { ...eventData.theme };
 		populateLocationFromEventData();
@@ -470,7 +478,7 @@
 									class="w-fit"
 									size="xs"
 								>
-									{#each visibilityOptions as option (option)}
+									{#each shownVisibilityOptions as option (option)}
 										<ToggleGroupItem value={option}>{VISIBILITY_LABELS[option]}</ToggleGroupItem>
 									{/each}
 								</ToggleGroup>

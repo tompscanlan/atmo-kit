@@ -8,15 +8,18 @@
 		viewer,
 		eventData = null,
 		visibilityOptions,
-		confirmVisibility
+		confirmVisibility,
+		initialVisibility = 'public'
 	}: {
 		adapter: EditorAdapter;
 		viewer: EditorViewer;
 		eventData?: FlatEventRecord | null;
 		visibilityOptions?: readonly Visibility[];
 		confirmVisibility?: (next: Visibility) => boolean | Promise<boolean>;
+		initialVisibility?: Visibility;
 	} = $props();
-	let visibility = $state<Visibility>('public');
+	// svelte-ignore state_referenced_locally
+	let visibility = $state<Visibility>(initialVisibility);
 </script>
 
 <EventEditor

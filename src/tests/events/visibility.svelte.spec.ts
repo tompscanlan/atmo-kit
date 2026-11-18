@@ -95,6 +95,33 @@ describe('the editor visibility switch', () => {
 		expect(confirmVisibility.mock.calls.map(([next]) => next)).toEqual(['unlisted', 'public']);
 	});
 
+	it('keeps an existing private event private, with no other choice', async () => {
+		render(VisibilityFixture, {
+			adapter: createPrivateAdapter(),
+			viewer,
+			// A private event's record says nothing about being private; the page knows.
+			eventData: { ...event, preferences: { showInDiscovery: false } } as typeof event,
+			visibilityOptions: ['public', 'unlisted', 'private'],
+			initialVisibility: 'private'
+		});
+		await expect.element(choice('Private')).toHaveAttribute('aria-checked', 'true');
+		await expect.element(chosen()).toHaveTextContent('private');
+		expect(choice('Public').elements()).toHaveLength(0);
+		expect(choice('Unlisted').elements()).toHaveLength(0);
+	});
+
+	it('does not offer Private for an existing public event', async () => {
+		render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			eventData: event,
+			visibilityOptions: ['public', 'unlisted', 'private']
+		});
+		await expect.element(choice('Public')).toHaveAttribute('aria-checked', 'true');
+		await expect.element(choice('Unlisted')).toBeVisible();
+		expect(choice('Private').elements()).toHaveLength(0);
+	});
+
 	it('keeps the newest choice when an older one is accepted after it', async () => {
 		const answers = new Map<Visibility, (ok: boolean) => void>();
 		const confirmVisibility = vi.fn<(next: Visibility) => Promise<boolean>>(
