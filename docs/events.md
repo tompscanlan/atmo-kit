@@ -83,11 +83,11 @@ A page can also show and edit an event that is not public, such as a record in a
 
 By default the switch offers Public and Unlisted. Unlisted only turns discovery off: the record stays in the host's public repo, where anyone can read it. A private event has to be saved somewhere else, such as a permissioned space. To offer Private, a page:
 
-- passes `visibilityOptions={['public', 'unlisted', 'private']}` and binds `visibility`;
-- while it is `'private'`, passes an adapter that saves privately and sets `features.private: true`, leaving `features.visibility` on so the host can switch back. The editor saves a Private event through no other adapter;
-- can pass `confirmVisibility(next)` to ask the host first; `false`, or a promise of `false`, keeps the current choice.
+- passes `visibilityOptions={['public', 'unlisted', 'private']}` and binds `visibility`, starting it at one of those options;
+- while it is `'private'`, passes an adapter that saves privately and sets `features.private: true`, leaving `features.visibility` on so the host can switch back. The editor saves a Private event through no other adapter: if the adapter doesn't set it, the editor refuses the save and shows why in an alert;
+- can pass `confirmVisibility(next)` to ask the host first; `false`, a promise of `false` or a rejected promise keeps the current choice.
 
-An existing event can't move to or from Private, because its record already lives where it was first saved. The record has no private field (its address in a space does, but the editor doesn't read it), so the editor opens an existing event as private when the page binds `'private'` or the adapter sets `features.private`. `EventVisibility` from `events-data` is its type.
+An existing event can't move to or from Private, because its record already lives where it was first saved. The editor offers it only the options on its side, so list Public or Unlisted for a public event, and refuses a save that would cross over, even if the page changes `visibility` or the adapter after the editor opens. The editor reads `eventData` once, when it opens: to edit another event, mount a new editor, for example inside `{#key}`. The record has no private field (its address in a space does, but the editor doesn't read it), so the editor opens an existing event as private when the page binds `'private'` or the adapter sets `features.private`. `EventVisibility` from `events-data` is its type.
 
 `EventView`, `EventCard` and `EventEditor` load the images in an event's `media` from the CDN set with `configureAtproto`, by `getCDNImageBlobUrl`. A page whose event's pictures must not reach a public CDN passes `mediaUrl`, a function of `{ did, blob }` that returns the image's address (or `null` to leave that image out), such as a route of its own that serves the picture only to people who can see the event. `EventMediaUrl` from `events-data` is its type. External images (`poster`, `Event Image`) are not affected; leave them out of `eventData` if they shouldn't load.
 
