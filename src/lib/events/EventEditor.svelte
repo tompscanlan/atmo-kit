@@ -275,6 +275,8 @@
 		// runs, and drops any pick still waiting for an answer.
 		const saveAdapter = adapter;
 		const saveVisibility = visibility;
+		const saveShowsVisibility = showVisibility;
+		const saveImages = images;
 		latestVisibilityPick++;
 		// A private event goes only to a save path that keeps it private, never to a public repo.
 		if (saveVisibility === 'private' && !saveAdapter.features.private)
@@ -284,7 +286,7 @@
 
 		try {
 			// Generate thumbnail from preset if selected and no custom upload
-			if (images && selectedPreset && !thumbnailFile) {
+			if (saveImages && selectedPreset && !thumbnailFile) {
 				const rendered = await renderPresetThumbnail({
 					design: selectedPreset,
 					seed: hashSeed(rkey),
@@ -309,7 +311,7 @@
 				thumbnailFile === generatedThumbnail;
 
 			const existingMedia = (eventData?.media ?? []) as Array<Record<string, unknown>>;
-			const media = images
+			const media = saveImages
 				? await buildThumbnailMedia({
 						isNew,
 						thumbnailChanged,
@@ -338,7 +340,7 @@
 				endsAt,
 				timezone,
 				mode,
-				visibility: showVisibility ? saveVisibility : null,
+				visibility: saveShowsVisibility ? saveVisibility : null,
 				theme: eventTheme,
 				links,
 				location,

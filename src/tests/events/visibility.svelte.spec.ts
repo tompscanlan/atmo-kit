@@ -269,4 +269,34 @@ describe('the editor visibility switch', () => {
 		await expect.element(chosen()).toHaveTextContent('public');
 		expect(confirmVisibility.mock.calls.map(([next]) => next)).toEqual(['unlisted']);
 	});
+
+	it('saves the choice it checked when the page hides the switch during the save', async () => {
+		const adapter = createAdapter();
+		let finishUpload: () => void = () => {};
+		adapter.uploadBlob.mockImplementationOnce(
+			() =>
+				new Promise(
+					(resolve) =>
+						(finishUpload = () =>
+							resolve({
+								$type: 'blob' as const,
+								ref: { $link: 'test-blob' },
+								mimeType: 'image/png',
+								size: 10
+							}))
+				)
+		);
+		const { rerender } = render(VisibilityFixture, { adapter, viewer });
+		await choice('Unlisted').click();
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.poll(() => adapter.uploadBlob.mock.calls.length).toBe(1);
+		await rerender({
+			adapter: { ...adapter, features: { ...adapter.features, visibility: false } }
+		});
+		finishUpload();
+		await expect.poll(() => adapter.putRecord.mock.calls.length).toBe(1);
+		expect(adapter.putRecord.mock.calls[0][0].record.preferences).toEqual({
+			showInDiscovery: false
+		});
+	});
 });
