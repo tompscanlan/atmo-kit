@@ -122,6 +122,67 @@ describe('the editor visibility switch', () => {
 		expect(choice('Private').elements()).toHaveLength(0);
 	});
 
+	it('opens an existing event through a private adapter as private', async () => {
+		render(VisibilityFixture, {
+			adapter: createPrivateAdapter(),
+			viewer,
+			eventData: { ...event, preferences: { showInDiscovery: false } } as typeof event,
+			visibilityOptions: ['public', 'unlisted', 'private']
+		});
+		await expect.element(chosen()).toHaveTextContent('private');
+		expect(choice('Unlisted').elements()).toHaveLength(0);
+	});
+
+	it('refuses a private save with the switch hidden, too', async () => {
+		const base = createAdapter();
+		const adapter = { ...base, features: { ...base.features, visibility: false } };
+		render(VisibilityFixture, { adapter, viewer, initialVisibility: 'private' });
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(adapter.putRecord).not.toHaveBeenCalled();
+	});
+
+	it('offers no recurring copies of a private event without a private adapter', async () => {
+		render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			eventData: event,
+			initialVisibility: 'private'
+		});
+		await expect.element(chosen()).toHaveTextContent('private');
+		expect(page.getByRole('button', { name: 'Add recurring events' }).elements()).toHaveLength(0);
+	});
+
+	it('holds the choice while saving, and drops a pick still waiting', async () => {
+		const adapter = createAdapter();
+		let finishSave: () => void = () => {};
+		adapter.putRecord.mockImplementation(
+			() => new Promise((resolve) => (finishSave = () => resolve({ uri: event.uri })))
+		);
+		let accept: (ok: boolean) => void = () => {};
+		const confirmVisibility = vi.fn<(next: Visibility) => Promise<boolean>>(
+			() => new Promise<boolean>((resolve) => (accept = resolve))
+		);
+		render(VisibilityFixture, {
+			adapter,
+			viewer,
+			visibilityOptions: ['public', 'unlisted', 'private'],
+			confirmVisibility
+		});
+		await choice('Unlisted').click();
+		await expect.poll(() => confirmVisibility.mock.calls.length).toBe(1);
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.poll(() => adapter.putRecord.mock.calls.length).toBe(1);
+		await expect.element(choice('Private')).toBeDisabled();
+		accept(true);
+		finishSave();
+		await expect.poll(() => adapter.onSaved.mock.calls.length).toBe(1);
+		await expect.element(chosen()).toHaveTextContent('public');
+		expect(adapter.putRecord.mock.calls[0][0].record.preferences).toEqual({
+			showInDiscovery: true
+		});
+	});
+
 	it('keeps the newest choice when an older one is accepted after it', async () => {
 		const answers = new Map<Visibility, (ok: boolean) => void>();
 		const confirmVisibility = vi.fn<(next: Visibility) => Promise<boolean>>(

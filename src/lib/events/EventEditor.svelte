@@ -150,7 +150,8 @@
 	async function chooseVisibility(next: Visibility) {
 		const pick = ++latestVisibilityPick;
 		if (next === visibility) return;
-		if (confirmVisibility && !(await confirmVisibility(next))) return;
+		if (confirmVisibility && !(await Promise.resolve(confirmVisibility(next)).catch(() => false)))
+			return;
 		if (pick !== latestVisibilityPick) return;
 		visibility = next;
 	}
@@ -217,8 +218,9 @@
 		mode = eventData.mode ? stripModePrefix(eventData.mode) : 'inperson';
 		const prefs = (eventData as unknown as { preferences?: { showInDiscovery?: boolean } })
 			.preferences;
-		// A private event's record doesn't say it is private; the page does, and that stays.
-		if (visibility !== 'private')
+		// A private event's record doesn't say it is private; the page or a private adapter does.
+		if (adapter.features.private) visibility = 'private';
+		else if (visibility !== 'private')
 			visibility = prefs && prefs.showInDiscovery === false ? 'unlisted' : 'public';
 		links = eventData.uris ? eventData.uris.map((l) => ({ uri: l.uri, name: l.name || '' })) : [];
 		if (eventData.theme) eventTheme = { ...eventData.theme };
@@ -268,8 +270,13 @@
 		if (parseDateTime(endsAt).compare(parseDateTime(startsAt)) <= 0)
 			return void (error = 'End time must be after the start time.');
 		if (!viewer.isLoggedIn || !viewer.did) return void (error = 'You must be logged in.');
+		// The save uses the choice and the adapter as they are now, even if they change while it
+		// runs, and drops any pick still waiting for an answer.
+		const saveAdapter = adapter;
+		const saveVisibility = visibility;
+		latestVisibilityPick++;
 		// A private event goes only to a save path that keeps it private, never to a public repo.
-		if (showVisibility && visibility === 'private' && !adapter.features.private)
+		if (saveVisibility === 'private' && !saveAdapter.features.private)
 			return void (error = "This page can't save a private event, so it wasn't saved.");
 
 		submitting = true;
@@ -309,7 +316,7 @@
 						existingMedia,
 						uploadBlob: async (blob) => {
 							try {
-								return (await adapter.uploadBlob(blob)) as unknown as Record<string, unknown>;
+								return (await saveAdapter.uploadBlob(blob)) as unknown as Record<string, unknown>;
 							} catch (e) {
 								if (!defaultCover) throw e;
 								console.warn('Generated cover not uploaded; saving the event without it:', e);
@@ -330,13 +337,13 @@
 				endsAt,
 				timezone,
 				mode,
-				visibility: showVisibility ? visibility : null,
+				visibility: showVisibility ? saveVisibility : null,
 				theme: eventTheme,
 				links,
 				location,
 				locationChanged,
 				media,
-				resolveHandle: (handle) => adapter.resolveHandle(handle)
+				resolveHandle: (handle) => saveAdapter.resolveHandle(handle)
 			});
 
 			if (isNew && prefill?.additionalData) {
@@ -344,14 +351,14 @@
 				record.additionalData = { ...existing, ...prefill.additionalData };
 			}
 
-			const result = await adapter.putRecord({
+			const result = await saveAdapter.putRecord({
 				collection: 'community.lexicon.calendar.event',
 				rkey,
 				record
 			});
 
-			await adapter.notifyUpdate?.(result.uri);
-			adapter.onSaved({ uri: result.uri, rkey, isNew });
+			await saveAdapter.notifyUpdate?.(result.uri);
+			saveAdapter.onSaved({ uri: result.uri, rkey, isNew });
 		} catch (e) {
 			console.error(`Failed to ${isNew ? 'create' : 'save'} event:`, e);
 			error =
@@ -475,6 +482,7 @@
 											if (val) void chooseVisibility(val as Visibility);
 										}
 									}
+									disabled={submitting}
 									class="w-fit"
 									size="xs"
 								>
@@ -556,7 +564,7 @@
 									? 'Publish Event'
 									: 'Save Changes'}
 						</Button>
-						{#if !isNew && adapter.features.recurring}
+						{#if !isNew && adapter.features.recurring && (visibility !== 'private' || adapter.features.private)}
 							<Button
 								type="button"
 								variant="secondary"
