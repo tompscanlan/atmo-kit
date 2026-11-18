@@ -218,7 +218,8 @@
 		mode = eventData.mode ? stripModePrefix(eventData.mode) : 'inperson';
 		const prefs = (eventData as unknown as { preferences?: { showInDiscovery?: boolean } })
 			.preferences;
-		// A private event's record doesn't say it is private; the page or a private adapter does.
+		// The record has no private field (its address in a space does, but isn't read here), so the
+		// page or a private adapter says so.
 		if (adapter.features.private) visibility = 'private';
 		else if (visibility !== 'private')
 			visibility = prefs && prefs.showInDiscovery === false ? 'unlisted' : 'public';

@@ -99,7 +99,7 @@ describe('the editor visibility switch', () => {
 		render(VisibilityFixture, {
 			adapter: createPrivateAdapter(),
 			viewer,
-			// A private event's record says nothing about being private; the page knows.
+			// The record has no private field, and the editor doesn't read its address, so the page says so.
 			eventData: { ...event, preferences: { showInDiscovery: false } } as typeof event,
 			visibilityOptions: ['public', 'unlisted', 'private'],
 			initialVisibility: 'private'
