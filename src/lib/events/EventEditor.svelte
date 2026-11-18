@@ -137,9 +137,14 @@
 		unlisted: 'Unlisted',
 		private: 'Private'
 	};
+	// Each pick replaces any still waiting for an answer, so an older answer that lands late
+	// doesn't undo a newer pick.
+	let latestVisibilityPick = 0;
 	async function chooseVisibility(next: Visibility) {
+		const pick = ++latestVisibilityPick;
 		if (next === visibility) return;
 		if (confirmVisibility && !(await confirmVisibility(next))) return;
+		if (pick !== latestVisibilityPick) return;
 		visibility = next;
 	}
 	let submitting = $state(false);
@@ -255,6 +260,9 @@
 		if (parseDateTime(endsAt).compare(parseDateTime(startsAt)) <= 0)
 			return void (error = 'End time must be after the start time.');
 		if (!viewer.isLoggedIn || !viewer.did) return void (error = 'You must be logged in.');
+		// A private event goes only to a save path that keeps it private, never to a public repo.
+		if (showVisibility && visibility === 'private' && !adapter.features.private)
+			return void (error = "This page can't save a private event, so it wasn't saved.");
 
 		submitting = true;
 
@@ -528,7 +536,7 @@
 						</div>
 
 						{#if error}
-							<p class="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>
+							<p role="alert" class="mb-4 text-sm text-red-600 dark:text-red-400">{error}</p>
 						{/if}
 
 						<Button type="submit" disabled={submitting || !name.trim() || !startsAt || !endsAt}>

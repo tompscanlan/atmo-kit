@@ -49,6 +49,11 @@ export type EditorAdapter = {
 		 * record's discovery preference is left as it is.
 		 */
 		visibility?: boolean;
+		/**
+		 * True when this adapter saves an event where only the people invited can see it. The
+		 * editor saves an event set to Private only through such an adapter.
+		 */
+		private?: boolean;
 	};
 	putRecord(opts: {
 		collection: string;

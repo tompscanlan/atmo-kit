@@ -9,6 +9,12 @@ import './theme.css';
 const choice = (name: string) => page.getByRole('radio', { name, exact: true });
 const chosen = () => page.getByRole('status', { name: 'Chosen visibility' });
 
+/** An adapter that saves where only invited people can see the event. */
+function createPrivateAdapter() {
+	const adapter = createAdapter();
+	return { ...adapter, features: { ...adapter.features, private: true } };
+}
+
 async function publishedPreferences(adapter: ReturnType<typeof createAdapter>) {
 	await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
 	await expect.poll(() => adapter.putRecord.mock.calls.length).toBe(1);
@@ -89,8 +95,46 @@ describe('the editor visibility switch', () => {
 		expect(confirmVisibility.mock.calls.map(([next]) => next)).toEqual(['unlisted', 'public']);
 	});
 
-	it('saves a private event as not in discovery', async () => {
+	it('keeps the newest choice when an older one is accepted after it', async () => {
+		const answers = new Map<Visibility, (ok: boolean) => void>();
+		const confirmVisibility = vi.fn<(next: Visibility) => Promise<boolean>>(
+			(next) => new Promise<boolean>((resolve) => answers.set(next, resolve))
+		);
+		render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			visibilityOptions: ['public', 'unlisted', 'private'],
+			confirmVisibility
+		});
+		await choice('Unlisted').click();
+		await choice('Private').click();
+		await expect.poll(() => confirmVisibility.mock.calls.length).toBe(2);
+		answers.get('private')!(true);
+		await expect.element(chosen()).toHaveTextContent('private');
+		answers.get('unlisted')!(true);
+		// Give the older answer the time it would need to land.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await expect.element(chosen()).toHaveTextContent('private');
+		await expect.element(choice('Private')).toHaveAttribute('aria-checked', 'true');
+	});
+
+	it('refuses to save a private event where everyone could see it', async () => {
 		const adapter = createAdapter();
+		render(VisibilityFixture, {
+			adapter,
+			viewer,
+			visibilityOptions: ['public', 'unlisted', 'private']
+		});
+		await choice('Private').click();
+		await expect.element(chosen()).toHaveTextContent('private');
+		await page.getByRole('button', { name: 'Publish Event', exact: true }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(adapter.putRecord).not.toHaveBeenCalled();
+		expect(adapter.onSaved).not.toHaveBeenCalled();
+	});
+
+	it('saves a private event as not in discovery', async () => {
+		const adapter = createPrivateAdapter();
 		render(VisibilityFixture, {
 			adapter,
 			viewer,
