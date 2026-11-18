@@ -673,5 +673,7 @@
 	{selectedPreset}
 	{adapter}
 	{viewer}
+	{visibility}
+	{privacyRefusal}
 	accent={eventTheme.accentColor}
 />

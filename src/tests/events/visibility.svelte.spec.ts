@@ -349,4 +349,44 @@ describe('the editor visibility switch', () => {
 		expect(privateAdapter.putRecord).not.toHaveBeenCalled();
 		expect(page.getByRole('button', { name: 'Add recurring events' }).elements()).toHaveLength(0);
 	});
+
+	it('writes every recurring copy through the adapter it started with', async () => {
+		const privateAdapter = createPrivateAdapter();
+		const ordinary = createAdapter();
+		let finishFirst: () => void = () => {};
+		privateAdapter.putRecord.mockImplementationOnce(
+			() => new Promise((resolve) => (finishFirst = () => resolve({ uri: event.uri })))
+		);
+		const { rerender } = render(VisibilityFixture, {
+			adapter: privateAdapter,
+			viewer,
+			eventData: event,
+			initialVisibility: 'private'
+		});
+		await page.getByRole('button', { name: 'Add recurring events' }).click();
+		await page.getByRole('button', { name: 'Create 4 events' }).click();
+		await expect.poll(() => privateAdapter.putRecord.mock.calls.length).toBe(1);
+		await rerender({ adapter: ordinary });
+		finishFirst();
+		await expect.poll(() => privateAdapter.putRecord.mock.calls.length).toBe(4);
+		expect(ordinary.putRecord).not.toHaveBeenCalled();
+		expect(ordinary.notifyUpdate).not.toHaveBeenCalled();
+	});
+
+	it('refuses recurring copies of a private event once the page passes an ordinary adapter', async () => {
+		const ordinary = createAdapter();
+		const { rerender } = render(VisibilityFixture, {
+			adapter: createPrivateAdapter(),
+			viewer,
+			eventData: event,
+			initialVisibility: 'private'
+		});
+		await page.getByRole('button', { name: 'Add recurring events' }).click();
+		await expect.element(page.getByRole('button', { name: 'Create 4 events' })).toBeVisible();
+		await rerender({ adapter: ordinary });
+		await page.getByRole('button', { name: 'Create 4 events' }).click();
+		await expect.element(page.getByRole('alert')).toBeVisible();
+		expect(ordinary.putRecord).not.toHaveBeenCalled();
+		expect(ordinary.uploadBlob).not.toHaveBeenCalled();
+	});
 });

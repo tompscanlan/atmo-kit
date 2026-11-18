@@ -3,7 +3,7 @@
 	import { parseDateTime } from '@internationalized/date';
 	import * as TID from '@atcute/tid';
 	import type { FlatEventRecord } from '../contrail.js';
-	import type { EventLocation, EventMode } from './types';
+	import type { EventLocation, EventMode, Visibility } from './types';
 	import { LocationValidationError, normalizeAddressLocation } from './location';
 	import { buildThumbnailMedia, renderPresetThumbnail } from './save';
 	import { hashSeed } from '../thumbnails/designs.js';
@@ -28,7 +28,9 @@
 		selectedPreset,
 		accent,
 		adapter,
-		viewer
+		viewer,
+		visibility,
+		privacyRefusal
 	}: {
 		open: boolean;
 		rkey: string;
@@ -49,6 +51,9 @@
 		accent: string;
 		adapter: EditorAdapter;
 		viewer: EditorViewer;
+		visibility: Visibility;
+		/** The editor's reason a save with this choice through this adapter could break privacy. */
+		privacyRefusal: (choice: Visibility, through: EditorAdapter) => string | null;
 	} = $props();
 
 	let interval = $state(1);
@@ -86,6 +91,14 @@
 			return;
 		const copies = count;
 		const period = interval;
+		// The copies go through the adapter as it is now, even if the page changes it while they
+		// are written, and only where the event itself could be saved.
+		const saveAdapter = adapter;
+		const refusal = privacyRefusal(visibility, saveAdapter);
+		if (refusal) {
+			errorMsg = `${refusal} No copies were made.`;
+			return;
+		}
 
 		creating = true;
 		errorMsg = null;
@@ -134,7 +147,7 @@
 				thumbnailFile: fileForUpload,
 				existingMedia,
 				uploadBlob: (blob) =>
-					adapter.uploadBlob(blob) as unknown as Promise<Record<string, unknown>>
+					saveAdapter.uploadBlob(blob) as unknown as Promise<Record<string, unknown>>
 			});
 
 			const parentUri = `at://${viewer.did}/community.lexicon.calendar.event/${rkey}`;
@@ -192,12 +205,12 @@
 				}
 
 				try {
-					const result = await adapter.putRecord({
+					const result = await saveAdapter.putRecord({
 						collection: 'community.lexicon.calendar.event',
 						rkey: newRkey,
 						record
 					});
-					await adapter.notifyUpdate?.(result.uri);
+					await saveAdapter.notifyUpdate?.(result.uri);
 					created = i + 1;
 				} catch {
 					errorMsg = `Failed to create event ${i + 1}. Stopping.`;
