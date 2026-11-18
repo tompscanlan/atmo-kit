@@ -479,9 +479,9 @@
 									type="single"
 									bind:value={
 										() => visibility,
-										(val) => {
-											if (val) void chooseVisibility(val as Visibility);
-										}
+										// Picking the current choice again sends '': still a pick, so it drops any
+										// pick waiting for an answer.
+										(val) => void chooseVisibility((val || visibility) as Visibility)
 									}
 									disabled={submitting}
 									class="w-fit"

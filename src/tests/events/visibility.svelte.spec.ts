@@ -248,4 +248,25 @@ describe('the editor visibility switch', () => {
 		await expect.element(chosen()).toHaveTextContent('unlisted');
 		await expect.element(choice('Unlisted')).toHaveAttribute('aria-checked', 'true');
 	});
+
+	it('lets picking the current choice drop a pick still waiting', async () => {
+		let accept: (ok: boolean) => void = () => {};
+		const confirmVisibility = vi.fn<(next: Visibility) => Promise<boolean>>(
+			() => new Promise<boolean>((resolve) => (accept = resolve))
+		);
+		render(VisibilityFixture, {
+			adapter: createAdapter(),
+			viewer,
+			visibilityOptions: ['public', 'unlisted', 'private'],
+			confirmVisibility
+		});
+		await choice('Unlisted').click();
+		await expect.poll(() => confirmVisibility.mock.calls.length).toBe(1);
+		await choice('Public').click();
+		accept(true);
+		// Give the older answer the time it would need to land.
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		await expect.element(chosen()).toHaveTextContent('public');
+		expect(confirmVisibility.mock.calls.map(([next]) => next)).toEqual(['unlisted']);
+	});
 });
